@@ -6,6 +6,7 @@ import { useConfirmDialog, useStorage } from '@vueuse/core';
 const props = defineProps<{
   space: ExtendedSpace;
 }>();
+const spaceType = computed(() => (props.space.turbo ? 'turbo' : 'default'));
 
 useMeta({
   title: {
@@ -35,13 +36,15 @@ const {
   populateForm,
   resetForm,
   forceShowError
-} = useFormSpaceSettings('settings');
+} = useFormSpaceSettings('settings', {
+  spaceType: spaceType.value
+});
 const { resetTreasuryAssets } = useTreasury();
 const { notify } = useFlashNotification();
 const { isGnosisAndNotDefaultNetwork } = useGnosis();
 const {
   settingENSRecord,
-  modalUnsupportedNetworkOpen,
+  modalWrongNetworkOpen,
   modalConfirmSetTextRecordOpen,
   spaceControllerInput,
   setRecord,
@@ -66,6 +69,7 @@ const loaded = ref(false);
 const modalControllerEditOpen = ref(false);
 const currentPage = ref(Page.GENERAL);
 const modalDeleteSpaceConfirmation = ref('');
+const modalDeleteSpaceAcknowledge = ref(false);
 const modalSettingsSavedOpen = ref(false);
 const modalSettingsSavedIgnore = useStorage(
   'snapshot.settings.saved.ignore',
@@ -112,11 +116,12 @@ const settingsPages = computed(() => [
 
 async function handleDelete() {
   modalDeleteSpaceConfirmation.value = '';
+  modalDeleteSpaceAcknowledge.value = false;
 
-  const result = await send(props.space, 'delete-space', null);
+  const result = await send(props.space, 'delete-space', {});
   console.log(':handleDelete result', result);
 
-  if (result && result.id) {
+  if (result?.id) {
     if (domain) {
       return window.open(`https://snapshot.org/#/`, '_self');
     } else {
@@ -148,13 +153,6 @@ async function handleSubmit() {
   }
 }
 
-onMounted(async () => {
-  populateForm(props.space);
-  await loadEnsOwner();
-  await loadSpaceController();
-  loaded.value = true;
-});
-
 const {
   isRevealed: isConfirmLeaveOpen,
   reveal: openConfirmLeave,
@@ -168,15 +166,22 @@ const {
   cancel: cancelDelete
 } = useConfirmDialog();
 
+const isViewOnly = computed(() => {
+  return !(isSpaceController.value || isSpaceAdmin.value);
+});
+
+onMounted(async () => {
+  populateForm(props.space);
+  await loadEnsOwner();
+  await loadSpaceController();
+  loaded.value = true;
+});
+
 onBeforeRouteLeave(async () => {
-  if (hasFormChanged.value) {
+  if (hasFormChanged.value && !isViewOnly.value) {
     const { data } = await openConfirmLeave();
     if (!data) return false;
   }
-});
-
-const isViewOnly = computed(() => {
-  return !(isSpaceController.value || isSpaceAdmin.value);
 });
 </script>
 
@@ -190,6 +195,15 @@ const isViewOnly = computed(() => {
 
       <template v-else>
         <div class="mt-3 space-y-3 sm:mt-0">
+          <SpaceSettingsMessageHibernated
+            v-if="space.hibernated && !isViewOnly"
+            :space="space"
+            :is-sending="isSending"
+            :is-valid="isValid"
+            @show-errors="showFormErrors = true"
+            @reactivate-space="handleSubmit"
+          />
+
           <BaseMessageBlock
             v-if="showFormErrors && Object.keys(validationErrors).length"
             level="warning-red"
@@ -232,6 +246,8 @@ const isViewOnly = computed(() => {
             <SettingsStrategiesBlock
               context="settings"
               :is-view-only="isViewOnly"
+              :show-errors="showFormErrors"
+              :space-type="spaceType"
             />
           </template>
 
@@ -239,6 +255,7 @@ const isViewOnly = computed(() => {
             <SettingsValidationBlock
               context="settings"
               :is-view-only="isViewOnly"
+              :show-errors="showFormErrors"
             />
             <SettingsProposalBlock
               context="settings"
@@ -247,6 +264,8 @@ const isViewOnly = computed(() => {
           </template>
 
           <template v-if="currentPage === Page.VOTING">
+            <SettingsBoostBlock context="settings" :is-view-only="isViewOnly" />
+
             <SettingsVotingBlock
               context="settings"
               :is-view-only="isViewOnly"
@@ -276,16 +295,18 @@ const isViewOnly = computed(() => {
             />
             <SettingsTreasuriesBlock
               context="settings"
+              :space="space"
               :is-view-only="isViewOnly"
+              :error="validationErrors.treasuries"
             />
             <SettingsSubSpacesBlock
               context="settings"
               :is-view-only="isViewOnly"
             />
-            <SettingsDomainBlock
+            <!-- <SettingsDomainBlock
               context="settings"
               :is-view-only="isViewOnly"
-            />
+            /> -->
             <SettingsDangerzoneBlock
               :is-controller="isSpaceController"
               :ens-owner="ensOwner"
@@ -300,10 +321,10 @@ const isViewOnly = computed(() => {
             v-if="isSpaceAdmin || isSpaceController"
             class="flex gap-5 px-4 pt-2 md:px-0"
           >
-            <BaseButton class="mb-2 block w-full" @click="resetForm">
+            <TuneButton class="mb-2 block w-full" @click="resetForm">
               {{ $t('reset') }}
-            </BaseButton>
-            <BaseButton
+            </TuneButton>
+            <TuneButton
               :disabled="!isReadyToSubmit || isGnosisAndNotDefaultNetwork"
               :loading="isSending"
               class="block w-full"
@@ -311,7 +332,7 @@ const isViewOnly = computed(() => {
               @click="handleSubmit"
             >
               {{ $t('save') }}
-            </BaseButton>
+            </TuneButton>
           </div>
         </div>
       </template>
@@ -346,17 +367,20 @@ const isViewOnly = computed(() => {
     </template>
   </TheLayout>
 
+  <ModalWrongNetwork
+    :open="modalWrongNetworkOpen"
+    show-demo-button
+    @close="modalWrongNetworkOpen = false"
+    @network-changed="modalConfirmSetTextRecordOpen = true"
+  />
+
   <teleport to="#modal">
     <ModalControllerEdit
       :open="modalControllerEditOpen"
       :ens-address="space.id"
       @close="modalControllerEditOpen = false"
     />
-    <ModalUnsupportedNetwork
-      :open="modalUnsupportedNetworkOpen"
-      @close="modalUnsupportedNetworkOpen = false"
-      @networkChanged="modalConfirmSetTextRecordOpen = true"
-    />
+
     <ModalConfirmAction
       :open="modalConfirmSetTextRecordOpen"
       @close="modalConfirmSetTextRecordOpen = false"
@@ -382,13 +406,16 @@ const isViewOnly = computed(() => {
     />
     <ModalConfirmAction
       :open="isConfirmDeleteOpen"
-      :disabled="modalDeleteSpaceConfirmation !== space.id"
+      :disabled="
+        modalDeleteSpaceConfirmation !== space.id ||
+        !modalDeleteSpaceAcknowledge
+      "
       show-cancel
       @close="cancelDelete"
       @confirm="handleDelete"
     >
-      <BaseMessageBlock level="warning" class="m-4">
-        {{ $t('settings.confirmDeleteSpace') }}
+      <BaseMessageBlock level="warning-red" class="m-4">
+        {{ $t('settings.confirmDeleteSpace', { name: space.id }) }}
       </BaseMessageBlock>
       <div class="px-4 pb-4">
         <BaseInput
@@ -397,6 +424,12 @@ const isViewOnly = computed(() => {
           focus-on-mount
         >
         </BaseInput>
+        <TuneCheckbox
+          id="space-delete-acknowledge"
+          v-model="modalDeleteSpaceAcknowledge"
+          :hint="`I acknowledge that I will not be able to use ${space.id} again to create a new space.`"
+          class="mt-3"
+        />
       </div>
     </ModalConfirmAction>
     <ModalNotice

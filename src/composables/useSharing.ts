@@ -6,14 +6,14 @@ export function useSharing() {
 
   const sharingItems = [
     {
-      text: 'Twitter',
-      action: 'shareProposalTwitter',
-      extras: { icon: 'twitter' }
+      text: 'Share on X',
+      action: 'shareProposalX',
+      extras: { icon: 'x' }
     },
     {
-      text: 'Lenster',
-      action: 'shareProposalLenster',
-      extras: { icon: 'lenster' }
+      text: 'Share on Hey',
+      action: 'shareProposalHey',
+      extras: { icon: 'hey' }
     },
     {
       text: t('copyLink'),
@@ -39,23 +39,68 @@ export function useSharing() {
     });
   }
 
+  function shareClaim(shareTo: 'x' | 'hey', payload: { proposal: Proposal }) {
+    const postText = getClaimedText(shareTo, payload);
+
+    if (window && shareTo === 'hey') return shareHey(postText);
+    if (isSupported.value)
+      return share({
+        title: '',
+        text: postText,
+        url: proposalUrl(payload.proposal.space.id, payload.proposal)
+      });
+    if (window && shareTo === 'x') return shareX(postText);
+  }
+
+  function getClaimedText(
+    shareTo: 'x' | 'hey',
+    payload: { proposal: Proposal }
+  ): string {
+    const claimedText = `I just claimed my reward for voting on`;
+
+    const spaceHandle = payload.proposal.space.twitter
+      ? `@${payload.proposal.space.twitter}`
+      : payload.proposal.space.name;
+
+    const hashTag = 'SnapshotClaim';
+
+    if (shareTo === 'hey')
+      return `${encodeURIComponent(claimedText)}%20"${encodeURIComponent(
+        payload.proposal.title
+      )}"%20${encodedProposalUrl(
+        payload.proposal.space.id,
+        payload.proposal
+      )}&hashtags=${hashTag}`;
+    if (isSupported.value)
+      return `${claimedText} "${payload.proposal.title}" ${spaceHandle} #${hashTag}`;
+    if (shareTo === 'x')
+      return `${encodeURIComponent(claimedText)}%20"${encodeURIComponent(
+        payload.proposal.title
+      )}"%20${encodedProposalUrl(
+        payload.proposal.space.id,
+        payload.proposal
+      )}%20${spaceHandle}%20%23${hashTag}`;
+
+    return `${claimedText} "${payload.proposal.title}"`;
+  }
+
   function shareVote(
-    shareTo: 'twitter' | 'lenster',
+    shareTo: 'x' | 'hey',
     payload: { space: ExtendedSpace; proposal: Proposal; choices: string }
   ) {
-    const postText = getSharingText(shareTo, payload);
+    const postText = getVotedText(shareTo, payload);
 
-    if (window && shareTo === 'lenster') return shareLenster(postText);
+    if (window && shareTo === 'hey') return shareHey(postText);
     if (isSupported.value)
       return share({
         title: '',
         text: postText,
         url: proposalUrl(payload.space.id, payload.proposal)
       });
-    if (window && shareTo === 'twitter') return shareTwitter(postText);
+    if (window && shareTo === 'x') return shareX(postText);
   }
 
-  function getSharingText(shareTo: 'twitter' | 'lenster', payload): string {
+  function getVotedText(shareTo: 'x' | 'hey', payload): string {
     const isSingleChoice =
       payload.proposal.type === 'single-choice' ||
       payload.proposal.type === 'basic';
@@ -69,39 +114,41 @@ export function useSharing() {
       ? `@${payload.space.twitter}`
       : payload.space.name;
 
-    if (shareTo === 'lenster')
+    const hashTag = 'SnapshotVote';
+
+    if (shareTo === 'hey')
       return `${encodeURIComponent(votedText)}%20"${encodeURIComponent(
         payload.proposal.title
       )}"%20${encodedProposalUrl(
         payload.space.id,
         payload.proposal
-      )}&hashtags=Snapshot`;
+      )}&hashtags=${hashTag}`;
     if (isSupported.value)
-      return `${votedText} "${payload.proposal.title}" ${spaceHandle} #Snapshot`;
-    if (shareTo === 'twitter')
+      return `${votedText} "${payload.proposal.title}" ${spaceHandle} #${hashTag}`;
+    if (shareTo === 'x')
       return `${encodeURIComponent(votedText)}%20"${encodeURIComponent(
         payload.proposal.title
       )}"%20${encodedProposalUrl(
         payload.space.id,
         payload.proposal
-      )}%20${spaceHandle}%20%23Snapshot`;
+      )}%20${spaceHandle}%20%23${hashTag}`;
 
     return `${votedText} "${payload.proposal.title}"`;
   }
 
-  function shareTwitter(text) {
-    const url = `https://twitter.com/intent/tweet?text=${text}`;
+  function shareX(text) {
+    const url = `https://x.com/intent/tweet?text=${text}`;
     window.open(url, '_blank')?.focus();
   }
 
-  function shareLenster(text) {
-    const url = `https://lenster.xyz/?text=${text}`;
+  function shareHey(text) {
+    const url = `https://hey.xyz/?text=${text}`;
     window.open(url, '_blank')?.focus();
   }
 
-  function shareProposalTwitter(space, proposal) {
+  function shareProposalX(space, proposal) {
     const handle = space.twitter ? `@${space.twitter}` : space.name;
-    shareTwitter(
+    shareX(
       `${encodeURIComponent(proposal.title)}%20${encodedProposalUrl(
         space.id,
         proposal
@@ -109,8 +156,8 @@ export function useSharing() {
     );
   }
 
-  function shareProposalLenster(space, proposal) {
-    shareLenster(
+  function shareProposalHey(space, proposal) {
+    shareHey(
       `${encodeURIComponent(proposal.title)}%20${encodedProposalUrl(
         space.id,
         proposal
@@ -125,12 +172,13 @@ export function useSharing() {
   }
 
   return {
-    shareProposalTwitter,
-    shareProposalLenster,
+    shareProposalX,
+    shareProposalHey,
     shareToClipboard,
     proposalUrl,
     shareProposal,
     shareVote,
+    shareClaim,
     sharingIsSupported: isSupported,
     sharingItems
   };

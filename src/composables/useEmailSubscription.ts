@@ -14,15 +14,19 @@ function useEmailSubscriptionComposable() {
 
   const userState = ref<SubscriptionStatus>('NOT_SUBSCRIBED');
   const error = ref('');
+  const initialized = ref(false);
   const loading = ref(false);
   const apiSubscriptions = ref<SubscriptionType[]>([]);
 
   const clientSubscriptions = computed({
     get() {
-      return subscriptionTypes.reduce((acc, type) => {
-        acc[type] = apiSubscriptions.value.includes(type);
-        return acc;
-      }, {} as Record<SubscriptionType, boolean>);
+      return subscriptionTypes.reduce(
+        (acc, type) => {
+          acc[type] = apiSubscriptions.value.includes(type);
+          return acc;
+        },
+        {} as Record<SubscriptionType, boolean>
+      );
     },
     set(value) {
       apiSubscriptions.value = Object.entries(value)
@@ -47,6 +51,7 @@ function useEmailSubscriptionComposable() {
     userState.value = usrState;
     apiSubscriptions.value = subscriptions || [];
     loading.value = false;
+    initialized.value = true;
   };
 
   const subscribe = async (email: string) => {
@@ -85,7 +90,8 @@ function useEmailSubscriptionComposable() {
     subscribe,
     updateSubscriptions,
     loadEmailSubscriptions,
-    loading
+    loading,
+    initialized
   };
 }
 

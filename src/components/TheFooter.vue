@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { SNAPSHOT_HELP_LINK } from '@/helpers/constants';
+
 const yearNow = new Date().getFullYear();
 
 const snapshotTextLinks = [
@@ -9,6 +11,16 @@ const snapshotTextLinks = [
   {
     text: 'blog',
     link: 'https://snapshot.mirror.xyz/'
+  },
+  {
+    text: 'network-support',
+    link: 'https://snapshot.box/#/network'
+  },
+  {
+    text: 'terms',
+    link: {
+      name: 'terms-and-conditions'
+    }
   }
 ];
 
@@ -26,8 +38,12 @@ const resourcesTextLinks = [
     link: 'https://docs.snapshot.org/'
   },
   {
+    text: 'featureRequests',
+    link: 'https://snapshot.canny.io/feature-requests'
+  },
+  {
     text: 'support',
-    link: 'https://discord.snapshot.org/'
+    link: SNAPSHOT_HELP_LINK
   }
 ];
 </script>

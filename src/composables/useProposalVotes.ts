@@ -1,6 +1,5 @@
 import { Proposal, Vote, VoteFilters } from '@/helpers/interfaces';
 import { VOTES_QUERY } from '@/helpers/queries';
-import { clone } from '@snapshot-labs/snapshot.js/src/utils';
 
 type QueryParams = {
   voter?: string;
@@ -13,26 +12,12 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
 
   const loadingVotes = ref(false);
   const loadingMoreVotes = ref(false);
+  const loadingUserVote = ref(false);
   const votes = ref<Vote[]>([]);
   const userVote = ref<Vote | null>(null);
 
-  const userPrioritizedVotes = computed(() => {
-    const votesClone = clone(votes.value);
-    if (userVote.value) {
-      const index = votesClone.findIndex(
-        vote => vote.ipfs === userVote.value?.ipfs
-      );
-      if (index !== -1) {
-        votesClone.splice(index, 1);
-      }
-      votesClone.unshift(userVote.value);
-    }
-
-    return votesClone;
-  });
-
   async function _fetchVotes(queryParams: QueryParams, skip = 0) {
-    return apolloQuery(
+    const response = await apolloQuery(
       {
         query: VOTES_QUERY,
         variables: {
@@ -47,10 +32,13 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
       },
       'votes'
     );
+
+    loadProfiles(response.map(vote => vote.voter));
+    return response;
   }
 
   async function _fetchVote(queryParams: QueryParams) {
-    return apolloQuery(
+    const response = await apolloQuery(
       {
         query: VOTES_QUERY,
         variables: {
@@ -60,6 +48,9 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
       },
       'votes'
     );
+
+    loadProfiles(response.map(vote => vote.voter));
+    return response;
   }
 
   function formatProposalVotes(votes: Vote[]) {
@@ -77,7 +68,6 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
     loadingVotes.value = true;
     try {
       const response = await _fetchVotes(filter);
-
       votes.value = formatProposalVotes(response);
     } catch (e) {
       console.log(e);
@@ -102,12 +92,16 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
   }
 
   async function loadMoreVotes(filter: Partial<VoteFilters> = {}) {
-    if (loadingMoreVotes.value || loadingVotes.value) return;
+    if (
+      loadingMoreVotes.value ||
+      loadingVotes.value ||
+      loadBy > votes.value.length
+    )
+      return;
 
     loadingMoreVotes.value = true;
     try {
       const response = await _fetchVotes(filter, votes.value.length);
-
       votes.value = votes.value.concat(formatProposalVotes(response));
     } catch (e) {
       console.log(e);
@@ -117,24 +111,26 @@ export function useProposalVotes(proposal: Proposal, loadBy = 6) {
   }
 
   async function loadUserVote(voter: string) {
+    if (!voter) return;
+    userVote.value = null;
+
     try {
+      loadingUserVote.value = true;
       const response = await _fetchVote({ voter });
       userVote.value = formatProposalVotes(response)[0];
     } catch (e) {
       console.log(e);
+    } finally {
+      loadingUserVote.value = false;
     }
   }
 
-  watch(userPrioritizedVotes, () => {
-    loadProfiles(userPrioritizedVotes.value.map(vote => vote.voter));
-  });
-
   return {
     votes,
-    userPrioritizedVotes,
     profiles,
     loadingVotes,
     loadingMoreVotes,
+    loadingUserVote: computed(() => loadingUserVote.value),
     userVote,
     formatProposalVotes,
     loadVotes,
