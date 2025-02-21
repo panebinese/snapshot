@@ -2,7 +2,7 @@ import snapshot from '@snapshot-labs/snapshot.js';
 import { getTokenBalances, ETHER_CONTRACT } from '@/helpers/covalent';
 import { TreasuryAsset } from '@/helpers/interfaces';
 
-const TOKEN_LIST_URL = 'https://gateway.ipfs.io/ipns/tokens.uniswap.org';
+const TOKEN_LIST_URL = 'https://ipfs.io/ipns/tokens.uniswap.org';
 
 const tokenListContractAddresses = ref<null | string[]>(null);
 const treasuryAssets = ref<{ [key: string]: TreasuryAsset[] }>({});
@@ -28,10 +28,14 @@ export function useTreasury() {
 
       if (treasuryAssets.value[address]) return;
       const balances = await getTokenBalances(address, chainId)
-        .then(balances =>
-          balances?.filter(balance =>
-            tokenListContractAddresses.value?.includes(balance.contract_address)
-          )
+        .then(
+          balances =>
+            balances?.filter(
+              balance =>
+                tokenListContractAddresses.value?.includes(
+                  balance.contract_address
+                )
+            )
         )
         .catch(() => []);
       if (balances) treasuryAssets.value[address] = balances;

@@ -4,7 +4,7 @@ import { BigNumber } from '@ethersproject/bignumber';
 import networks from '@snapshot-labs/snapshot.js/src/networks.json';
 import voting from '@snapshot-labs/snapshot.js/src/voting';
 import { getUrl } from '@snapshot-labs/snapshot.js/src/utils';
-import getProvider from '@snapshot-labs/snapshot.js/src/utils/provider';
+import { getAddress } from '@ethersproject/address';
 
 export function shortenAddress(str = '') {
   return `${str.slice(0, 6)}...${str.slice(str.length - 4)}`;
@@ -95,6 +95,15 @@ export function explorerUrl(network, str: string, type = 'address'): string {
   return `${networks[network].explorer.url}/${type}/${str}`;
 }
 
+export function openProfile(address: string, domain: string, router: any) {
+  return domain
+    ? window.open(`https://snapshot.org/#/profile/${address}`, '_blank')
+    : router.push({
+        name: 'profileActivity',
+        params: { address: address }
+      });
+}
+
 export function calcFromSeconds(value, unit) {
   if (unit === 'm') return Math.floor(value / 60);
   if (unit === 'h') return Math.floor(value / (60 * 60));
@@ -121,55 +130,77 @@ export async function clearStampCache(id: string, type = 'space') {
     return await fetch(`https://cdn.stamp.fyi/clear/avatar/eth:${id}`);
 }
 
-export function urlify(text: string, target = '_blank') {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  return text.replace(
-    urlRegex,
-    `<a href="$1" target="${target}" rel="noopener">$1</a>`
-  );
-}
-
-export async function resolveEns(handle: string) {
+export async function resolveHandle(handle: string) {
   try {
-    const broviderUrl = import.meta.env.VITE_BROVIDER_URL;
-    const provider = getProvider('1', { broviderUrl });
-    const addressResolved = await provider.resolveName(handle);
-    if (!addressResolved) throw new Error('Invalid ENS name');
-    return addressResolved;
-  } catch (error) {
-    console.error('Error in resolveEns:', error);
+    const results = await fetch(import.meta.env.VITE_STAMP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ method: 'resolve_names', params: [handle] })
+    });
+
+    return (await results.json()).result?.[handle];
+  } catch (e) {
+    console.error('Error resolving handle:', handle, e);
     return null;
   }
 }
 
-export async function resolveLens(handle: string) {
+export async function lookupAddress(
+  addresses: string[]
+): Promise<Record<string, string>> {
+  if (addresses.length === 0) {
+    return {};
+  }
+
   try {
-    const response = await fetch('https://api.lens.dev/', {
+    const response = await fetch(import.meta.env.VITE_STAMP_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        query: `
-          query Profiles {
-            profiles(request: { handles: ["${handle}"], limit: 1 }) {
-              items {
-                ownedBy
-              }
-            }
-          }
-        `
+        method: 'lookup_addresses',
+        params: addresses.slice(0, 50)
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
+    const results = (await response.json()).result;
 
-    const result = await response.json();
-    return result.data?.profiles?.items?.[0]?.ownedBy;
-  } catch (error) {
-    console.error('Error in resolveLens:', error);
-    return null;
+    return Object.fromEntries(
+      addresses.map(address => [address, results[address] || ''])
+    );
+  } catch (e) {
+    console.error('Error resolving addresses:', e);
+    return {};
   }
+}
+
+export function isSnapshotUrl(url: string) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch (err) {
+    console.error('Invalid URL', err);
+    return;
+  }
+
+  if (parsedUrl.hostname === 'snapshot.org') {
+    return true;
+  }
+
+  return false;
+}
+
+export function toChecksumAddress(address: string) {
+  try {
+    return getAddress(address.toLowerCase());
+  } catch (e) {
+    return address;
+  }
+}
+
+export function addressEqual(address1: string, address2: string) {
+  return address1.toLowerCase() === address2.toLowerCase();
 }

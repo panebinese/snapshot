@@ -27,7 +27,7 @@ export function useClient() {
     try {
       return await sendEIP712(space, type, payload);
     } catch (e: any) {
-      errorNotification(e?.error_description || '');
+      errorNotification(e?.error_description || e?.message || '');
       return e;
     } finally {
       isSending.value = false;
@@ -35,11 +35,16 @@ export function useClient() {
   }
 
   async function sendEIP712(space: { id: string }, type: string, payload: any) {
+    let plugins = {};
     const client = clientEIP712;
-    if (type === 'proposal') {
-      let plugins = {};
-      if (Object.keys(payload.metadata?.plugins).length !== 0)
-        plugins = payload.metadata.plugins;
+
+    if (
+      payload.metadata?.plugins &&
+      Object.keys(payload.metadata?.plugins).length !== 0
+    )
+      plugins = payload.metadata.plugins;
+
+    if (type === 'create-proposal') {
       return client.proposal(auth.web3, web3.value.account, {
         space: space.id,
         type: payload.type,
@@ -47,11 +52,26 @@ export function useClient() {
         body: payload.body,
         discussion: payload.discussion,
         choices: payload.choices,
+        labels: [],
         start: payload.start,
         end: payload.end,
         snapshot: payload.snapshot,
+        privacy: payload.privacy,
         plugins: JSON.stringify(plugins),
         app: DEFINED_APP
+      });
+    } else if (type === 'update-proposal') {
+      return client.updateProposal(auth.web3, web3.value.account, {
+        proposal: payload.id,
+        space: space.id,
+        type: payload.type,
+        title: payload.name,
+        body: payload.body,
+        discussion: payload.discussion,
+        choices: payload.choices,
+        labels: payload.labels,
+        privacy: payload.privacy,
+        plugins: JSON.stringify(plugins)
       });
     } else if (type === 'vote') {
       return client.vote(auth.web3, web3.value.account, {
@@ -81,7 +101,15 @@ export function useClient() {
       return client.statement(auth.web3, web3.value.account, {
         space: space.id,
         about: payload.about,
-        statement: payload.statement
+        statement: payload.statement,
+        discourse: payload.discourse,
+        network: payload.network,
+        status: payload.status
+      });
+    } else if (type === 'flag-proposal') {
+      return client.flagProposal(auth.web3, web3.value.account, {
+        space: space.id,
+        proposal: payload.proposal.id
       });
     }
   }

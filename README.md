@@ -15,8 +15,8 @@
     <a href="https://discord.snapshot.org/">
         <img src="https://img.shields.io/discord/707079246388133940.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" alt="Discord">
     </a>
-    <a href="https://twitter.com/SnapshotLabs">
-        <img src="https://img.shields.io/twitter/follow/SnapshotLabs?label=SnapshotLabs&style=flat&logo=twitter&color=1DA1F2" alt="Twitter">
+    <a href="https://x.com/SnapshotLabs">
+        <img src="https://img.shields.io/twitter/follow/SnapshotLabs?label=SnapshotLabs&style=social">
     </a>
 </div>
 <div align="center">
@@ -27,7 +27,7 @@
     •
     <a href="https://features.snapshot.org/feature-requests"><b>Feature requests</b></a>
     •
-    <a href="https://docs.snapshot.org/guides/contribute"><b>Contribute</b></a>
+    <a href="https://docs.snapshot.org/introduction#contributing"><b>Contribute</b></a>
 </div>
 
 ## Project setup
@@ -58,7 +58,7 @@ yarn run lint
 
 Use `http://localhost:8080/#/fabien.eth` for testing your code.
 
-By default your instance will connect to the hub at `https://testnet.snapshot.org`. To change that (or other values) you can create a `.env.local` and overwrite the values from `.env`.
+By default your instance will connect to the hub at `https://testnet.hub.snapshot.org`. To change that (or other values) you can create a `.env.local` and overwrite the values from `.env`.
 
 ## Running service locally with Docker
 1. Run `docker build -t snapshot .` to build the image
