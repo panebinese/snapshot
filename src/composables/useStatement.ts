@@ -21,6 +21,9 @@ export function useStatement() {
     statement: {
       about: string;
       statement: string;
+      discourse: string;
+      network: string;
+      status: string;
     }
   ) {
     const result = await send({ id: spaceId }, SET_STATEMENT_ACTION, statement);
@@ -57,10 +60,13 @@ export function useStatement() {
 
       if (!response) throw new Error('No statements found');
 
-      const newStatements = response.reduce((acc, statement) => {
-        acc[statement.delegate.toLowerCase()] = statement;
-        return acc;
-      }, {} as Record<string, Statement>);
+      const newStatements = response.reduce(
+        (acc, statement) => {
+          acc[statement.delegate.toLowerCase()] = statement;
+          return acc;
+        },
+        {} as Record<string, Statement>
+      );
       statements.value = { ...statements.value, ...newStatements };
     } catch (e) {
       console.error(e);
@@ -75,8 +81,20 @@ export function useStatement() {
     await loadStatements(spaceId, [id]);
   }
 
-  function getStatement(id: string): { about: string; statement: string } {
-    const defaultStatement = { about: '', statement: '' };
+  function getStatement(id: string): {
+    about: string;
+    statement: string;
+    network: string;
+    status: string;
+    discourse: string;
+  } {
+    const defaultStatement = {
+      about: '',
+      statement: '',
+      network: 's',
+      status: 'INACTIVE',
+      discourse: ''
+    };
     return clone(statements.value?.[id?.toLowerCase()] || defaultStatement);
   }
 

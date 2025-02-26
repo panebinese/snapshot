@@ -118,6 +118,11 @@
     "useFlaggedMessageStatus": true,
     "useEmailSubscription": true,
     "useEmailFetchClient": true,
-    "useStatement": true
+    "useStatement": true,
+    "useBalances": true,
+    "useAccount": true,
+    "usePayment": true,
+    "useChangeNetwork": true,
+    "useBoost": true
   }
 }

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { clone } from '@snapshot-labs/snapshot.js/src/utils';
-import { getInstance } from '@snapshot-labs/lock/plugins/vue3';
+import { ExtendedSpace } from '@/helpers/interfaces';
 import { PROPOSAL_QUERY } from '@/helpers/queries';
 import { proposalValidation } from '@/helpers/snapshot';
-import { ExtendedSpace } from '@/helpers/interfaces';
 import Plugin from '@/plugins/safeSnap';
+import { getInstance } from '@snapshot-labs/lock/plugins/vue3';
+import { clone } from '@snapshot-labs/snapshot.js/src/utils';
+import { PROPOSAL_BODY_LIMITS } from '@/helpers/constants';
 
 const safeSnapPlugin = new Plugin();
 
@@ -14,11 +15,14 @@ enum Step {
   PLUGINS
 }
 
-const BODY_LIMIT_CHARACTERS = 20000;
-
 const props = defineProps<{
   space: ExtendedSpace;
 }>();
+
+const spaceType = computed(() => (props.space.turbo ? 'turbo' : 'default'));
+const bodyCharactersLimit = computed(
+  () => PROPOSAL_BODY_LIMITS[spaceType.value]
+);
 
 useMeta({
   title: {
@@ -34,6 +38,7 @@ useMeta({
 
 const { notify } = useFlashNotification();
 const router = useRouter();
+const route = useRoute();
 const { t } = useI18n();
 const auth = getInstance();
 const { domain } = useApp();
@@ -47,6 +52,13 @@ const { isSnapshotLoading } = useSnapshot();
 const { apolloQuery, queryLoading } = useApolloQuery();
 const { containsShortUrl } = useShortUrls();
 
+const { isValid: isValidSpaceSettings, populateForm } = useFormSpaceSettings(
+  'settings',
+  {
+    spaceType: spaceType.value
+  }
+);
+
 const {
   form,
   formDraft,
@@ -55,7 +67,9 @@ const {
   sourceProposal,
   validationErrors,
   resetForm
-} = useFormSpaceProposal();
+} = useFormSpaceProposal({
+  spaceType: spaceType.value
+});
 
 const isValidAuthor = ref(false);
 const validationLoading = ref(false);
@@ -68,13 +82,17 @@ const proposal = computed(() =>
   Object.assign(form.value, { choices: form.value.choices })
 );
 
+const isEditing = computed(
+  () => !!(sourceProposal.value && route.query.editing)
+);
+
 type DateRange = {
   dateStart: number;
   dateEnd?: number;
 };
+
 function sanitizeDateRange({ dateStart, dateEnd }: DateRange): DateRange {
   const { delay = 0, period = 0 } = props.space?.voting ?? {};
-  console.log('sanitizeDateRange', { dateStart, dateEnd, delay, period });
   const threeDays = 259200;
   const currentTimestamp = Math.floor(Date.now() / 1000);
 
@@ -119,17 +137,38 @@ const isFormValid = computed(() => {
     ? form.value.metadata.plugins.safeSnap.valid
     : true;
 
+  const isOsnapPluginValid = (() => {
+    const safes = form.value.metadata.plugins.oSnap?.safes;
+    if (!safes) {
+      //  not using osnap plugin
+      return true;
+    }
+    if (safes.length && safes.some(safe => !(safe.transactions.length > 0))) {
+      //  using osnap, but some have no transactions
+      return false;
+    }
+    if (
+      safes &&
+      !safes.every(safe => safe.transactions.every(tx => tx.isValid))
+    ) {
+      //  all transactions must be valid
+      return false;
+    }
+    return true;
+  })();
+
   return (
+    !web3.value.authLoading &&
+    isOsnapPluginValid &&
     !isSending.value &&
-    form.value.body.length <= BODY_LIMIT_CHARACTERS &&
+    form.value.body.length <= bodyCharactersLimit.value &&
     dateEnd.value &&
     dateEnd.value > dateStart.value &&
     form.value.snapshot &&
     form.value.choices.length >= 1 &&
     !form.value.choices.some((a, i) => a.text === '' && i === 0) &&
     isValidAuthor.value &&
-    isSafeSnapPluginValid &&
-    !web3.value.authLoading
+    isSafeSnapPluginValid
   );
 });
 
@@ -147,7 +186,7 @@ const stepIsValid = computed(() => {
   if (
     currentStep.value === Step.CONTENT &&
     form.value.name &&
-    form.value.body.length <= BODY_LIMIT_CHARACTERS &&
+    form.value.body.length <= bodyCharactersLimit.value &&
     isValidAuthor.value &&
     !validationErrors.value.name &&
     !validationErrors.value.body &&
@@ -200,13 +239,22 @@ function getFormattedForm() {
     });
   clonedForm.start = sanitizedDateStart;
   clonedForm.end = sanitizedDateEnd;
+  clonedForm.privacy =
+    props.space.voting.privacy === 'any' ? '' : props.space.voting.privacy;
   return clonedForm;
 }
 
 const { resetSpaceProposals } = useProposals();
-async function handleSubmit() {
+
+function handleSubmit() {
+  if (!termsAccepted && props.space.terms) return (modalTermsOpen.value = true);
+  if (isEditing.value) return handleUpdate();
+  handleCreate();
+}
+
+async function handleCreate() {
   const formattedForm = getFormattedForm();
-  const result = await send(props.space, 'proposal', formattedForm);
+  const result = await send(props.space, 'create-proposal', formattedForm);
   if (result.id) {
     resetSpaceProposals();
     if (!result.ipfs) notify(['green', t('notify.waitingForOtherSigners')]);
@@ -222,6 +270,25 @@ async function handleSubmit() {
   }
 }
 
+async function handleUpdate() {
+  const formattedForm = getFormattedForm();
+  formattedForm.id = sourceProposal.value;
+  const result = await send(props.space, 'update-proposal', formattedForm);
+  if (result.id) {
+    resetSpaceProposals();
+    if (!result.ipfs) notify(['green', t('notify.waitingForOtherSigners')]);
+    else notify(['green', t('notify.proposalUpdated')]);
+    resetForm();
+    router.push({
+      name: 'spaceProposal',
+      params: {
+        key: props.space.id,
+        id: sourceProposal.value
+      }
+    });
+  }
+}
+
 function setSourceProposal(proposal) {
   const { plugins } = proposal;
 
@@ -230,6 +297,7 @@ function setSourceProposal(proposal) {
     body: proposal.body,
     discussion: proposal.discussion,
     choices: proposal.choices,
+    labels: proposal.labels,
     start: proposal.start,
     end: proposal.end,
     snapshot: proposal.snapshot,
@@ -321,27 +389,43 @@ watch(
   { immediate: true }
 );
 
+const hasOsnapPlugin = computed(() => {
+  return !!props.space?.plugins?.oSnap;
+});
+const shouldUseOsnap = ref(false);
+
+function toggleShouldUseOsnap() {
+  shouldUseOsnap.value = !shouldUseOsnap.value;
+}
+
 // We need to know if the space is using osnap, this will change what types of voting we can do
 // We also need to know if the user plans to use osnap
-const osnap = ref<{
+const legacyOsnap = ref<{
   enabled: boolean;
   selection: boolean;
+  valid: boolean;
 }>({
   selection: false,
-  enabled: false
+  enabled: false,
+  valid: false
 });
 
 // Skip transaction page if osnap is enabled, its not selected to be used, and we are on the voting page
 function shouldSkipTransactions() {
-  return (
-    osnap.value.enabled &&
-    !osnap.value.selection &&
-    currentStep.value === Step.VOTING
-  );
+  if (currentStep.value !== Step.VOTING) return false;
+  if (
+    legacyOsnap.value.enabled &&
+    legacyOsnap.value.valid &&
+    !legacyOsnap.value.selection
+  )
+    return true;
+  if (hasOsnapPlugin.value && !shouldUseOsnap.value) return true;
+  return false;
 }
 
-function handleOsnapToggle() {
-  osnap.value.selection = !osnap.value.selection;
+function handleLegacyOsnapToggle() {
+  legacyOsnap.value.selection = !legacyOsnap.value.selection;
+  shouldUseOsnap.value = !shouldUseOsnap.value;
 }
 
 onMounted(async () => {
@@ -349,7 +433,8 @@ onMounted(async () => {
   const umaAddress = props?.space?.plugins?.safeSnap?.safes?.[0]?.umaAddress;
   if (network && umaAddress) {
     // this is how we check if osnap is enabled and valid.
-    osnap.value.enabled =
+    legacyOsnap.value.enabled = true;
+    legacyOsnap.value.valid =
       (await safeSnapPlugin.validateUmaModule(network, umaAddress)) === 'uma';
   }
   if (sourceProposal.value && !sourceProposalLoaded.value)
@@ -368,6 +453,14 @@ onMounted(async () => {
     form.value.body = props.space.template;
   }
 });
+
+onBeforeRouteLeave(async () => {
+  if (isEditing.value) {
+    resetForm();
+  }
+});
+
+onMounted(() => populateForm(props.space));
 </script>
 
 <template>
@@ -388,6 +481,7 @@ onMounted(async () => {
         :space="space"
         :validation-failed="hasAuthorValidationFailed"
         :is-valid-author="isValidAuthor"
+        :is-valid-space="isValidSpaceSettings"
         :validation-name="validationName"
         :contains-short-url="formContainsShortUrl"
         data-testid="create-proposal-connect-wallet-warning"
@@ -398,7 +492,7 @@ onMounted(async () => {
         v-if="currentStep === Step.CONTENT"
         :space="space"
         :preview="preview"
-        :body-limit="BODY_LIMIT_CHARACTERS"
+        :body-limit="bodyCharactersLimit"
       />
 
       <!-- Step 2 -->
@@ -407,8 +501,12 @@ onMounted(async () => {
         :space="space"
         :date-start="dateStart"
         :date-end="dateEnd"
-        :osnap="osnap"
-        @osnapToggle="handleOsnapToggle"
+        :has-osnap-plugin="hasOsnapPlugin"
+        :should-use-osnap="shouldUseOsnap"
+        :legacy-osnap="legacyOsnap"
+        :is-editing="isEditing"
+        @toggle-should-use-osnap="toggleShouldUseOsnap"
+        @legacy-osnap-toggle="handleLegacyOsnapToggle"
       />
 
       <!-- Step 3 (only when plugins) -->
@@ -421,17 +519,17 @@ onMounted(async () => {
     </template>
     <template #sidebar-right>
       <BaseBlock class="lg:fixed lg:w-[320px]">
-        <BaseButton
+        <TuneButton
           v-if="currentStep === Step.CONTENT"
           class="mb-2 block w-full"
           @click="preview = !preview"
         >
           {{ preview ? $t('create.edit') : $t('create.preview') }}
-        </BaseButton>
-        <BaseButton v-else class="mb-2 block w-full" @click="previousStep">
+        </TuneButton>
+        <TuneButton v-else class="mb-2 block w-full" @click="previousStep">
           {{ $t('back') }}
-        </BaseButton>
-        <BaseButton
+        </TuneButton>
+        <TuneButton
           v-if="
             currentStep === Step.PLUGINS ||
             (!needsPluginConfigs && currentStep === Step.VOTING) ||
@@ -442,15 +540,11 @@ onMounted(async () => {
           class="block w-full"
           primary
           data-testid="create-proposal-publish-button"
-          @click="
-            !termsAccepted && space.terms
-              ? (modalTermsOpen = true)
-              : handleSubmit()
-          "
+          @click="handleSubmit"
         >
-          {{ $t('create.publish') }}
-        </BaseButton>
-        <BaseButton
+          {{ isEditing ? 'Save changes' : $t('create.publish') }}
+        </TuneButton>
+        <TuneButton
           v-else
           class="block w-full"
           :loading="validationLoading || isSnapshotLoading"
@@ -459,7 +553,9 @@ onMounted(async () => {
             web3.authLoading ||
             hasAuthorValidationFailed ||
             validationLoading ||
-            isGnosisAndNotSpaceNetwork
+            isGnosisAndNotSpaceNetwork ||
+            space.hibernated ||
+            !isValidSpaceSettings
           "
           primary
           :data-testid="
@@ -470,7 +566,7 @@ onMounted(async () => {
           @click="web3Account ? nextStep() : (modalAccountOpen = true)"
         >
           {{ web3Account ? $t('create.continue') : $t('connectWallet') }}
-        </BaseButton>
+        </TuneButton>
       </BaseBlock>
     </template>
   </TheLayout>

@@ -4,7 +4,7 @@ const props = defineProps<{
   isViewOnly?: boolean;
 }>();
 
-const { form } = useFormSpaceSettings(props.context);
+const { form, validationErrors } = useFormSpaceSettings(props.context);
 </script>
 
 <template>
@@ -15,6 +15,7 @@ const { form } = useFormSpaceSettings(props.context);
           v-model="form.voting.delay"
           :label="$t('settings.votingDelay')"
           :disabled="isViewOnly"
+          :error="validationErrors?.voting?.delay"
           hide-minutes
           block
         />
@@ -23,8 +24,28 @@ const { form } = useFormSpaceSettings(props.context);
           v-model="form.voting.period"
           :label="$t('settings.votingPeriod')"
           :disabled="isViewOnly"
+          :error="validationErrors?.voting?.period"
           hide-minutes
           block
+        />
+
+        <TuneListbox
+          v-model="form.voting.quorumType"
+          placeholder="Default"
+          label="Quorum type"
+          hint="The type of quorum used for this space."
+          :items="[
+            {
+              value: 'default',
+              name: 'Default'
+            },
+            {
+              value: 'rejection',
+              name: 'Quorum of rejection'
+            }
+          ]"
+          :disabled="isViewOnly"
+          :error="validationErrors?.voting?.quorumType"
         />
 
         <TuneInput
@@ -32,7 +53,7 @@ const { form } = useFormSpaceSettings(props.context);
           :label="$t('settings.quorum.label')"
           :hint="$t('settings.quorum.information')"
           :disabled="isViewOnly"
-          placeholder="1000"
+          placeholder="e.g. 1000"
           type="number"
           @update:model-value="value => (form.voting.quorum = Number(value))"
         />

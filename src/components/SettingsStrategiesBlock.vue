@@ -2,15 +2,25 @@
 import { SpaceStrategy } from '@/helpers/interfaces';
 import { clone } from '@snapshot-labs/snapshot.js/src/utils';
 import schemas from '@snapshot-labs/snapshot.js/src/schemas';
+import { STRATEGIES_LIMITS } from '@/helpers/constants';
+
+const spaceSchema = schemas.space;
 
 const props = defineProps<{
   context: 'setup' | 'settings';
   title?: string;
+  showErrors?: boolean;
   isViewOnly?: boolean;
+  spaceType?: string;
 }>();
 
-const { form, validationErrors } = useFormSpaceSettings(props.context);
+const { form, validationErrors } = useFormSpaceSettings(props.context, {
+  spaceType: props.spaceType
+});
 
+const strategiesLimit = computed(
+  () => STRATEGIES_LIMITS[props.spaceType || 'default']
+);
 const strategies = computed(() => form.value.strategies);
 
 const strategyObj = {
@@ -61,6 +71,8 @@ function handleSubmitStrategy(strategy) {
           :network="form.network"
           :hint="$t('settings.network.information')"
           :disabled="isViewOnly"
+          :error="validationErrors?.network"
+          :show-errors="showErrors"
           @select="value => (form.network = value)"
         />
         <TuneInput
@@ -71,13 +83,16 @@ function handleSubmitStrategy(strategy) {
           :error="validationErrors?.symbol"
           :max-length="schemas.space.properties.symbol.maxLength"
           :disabled="isViewOnly"
+          autofocus
         />
       </ContainerParallelInput>
 
       <div class="flex justify-between">
         <div>
           <div class="flex items-center gap-1">
-            <h4>{{ $t('settings.strategiesList') }}</h4>
+            <h4>
+              {{ $tc('settings.strategiesList', [strategiesLimit]) }}
+            </h4>
             <IconInformationTooltip
               class="text-sm"
               :information="$t('settings.strategies.information')"
@@ -88,22 +103,21 @@ function handleSubmitStrategy(strategy) {
           </div>
         </div>
         <div>
-          <BaseButton
+          <TuneButton
             class="flex w-full items-center gap-1"
             :disabled="isViewOnly"
             @click="handleAddStrategy"
           >
             <i-ho-plus class="text-sm" />
             {{ $t('add') }}
-          </BaseButton>
+          </TuneButton>
         </div>
       </div>
-      <div class="mt-3">
+      <div class="mt-3 space-y-3">
         <StrategiesListItem
           v-for="(strategy, i) in strategies"
           :key="i"
           :strategy="strategy"
-          class="rounded-md !border last:!mb-0"
           :show-delete="!isViewOnly"
           :show-edit="!isViewOnly"
           @edit="handleEditStrategy(i)"
@@ -112,6 +126,7 @@ function handleSubmitStrategy(strategy) {
       </div>
 
       <StrategiesBlockWarning
+        v-if="showErrors"
         :error="validationErrors?.strategies"
         :context="context"
       />

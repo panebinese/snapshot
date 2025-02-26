@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { ExtendedSpace } from '@/helpers/interfaces';
 import draggable from 'vuedraggable';
+import SpaceCreateLegacyOsnap from './SpaceCreateLegacyOsnap.vue';
+import SpaceCreateOsnap from './SpaceCreateOsnap.vue';
+import { BOOST_ENABLED_VOTING_TYPES } from '@/helpers/constants';
 
 const props = defineProps<{
   space: ExtendedSpace;
   dateStart: number;
   dateEnd: number;
-  osnap: { enabled: boolean; selection: boolean };
+  hasOsnapPlugin: boolean;
+  shouldUseOsnap: boolean;
+  legacyOsnap: { enabled: boolean; selection: boolean };
+  isEditing: boolean;
 }>();
 
 const {
@@ -54,16 +60,23 @@ watch(
   { immediate: true }
 );
 
-// we need to watch for selection change to properly update the voting form stae
 watch(
-  () => props.osnap.selection,
+  () => props.legacyOsnap.selection,
   () => {
     // If using osnap, we can only allow basic voting, for, against, abstain
-    if (props.osnap.selection) {
+    if (props.legacyOsnap.selection) {
       form.value.type = 'basic';
-    } else {
-      // Initialize the proposal type if set in space
-      if (props.space?.voting?.type) form.value.type = props.space.voting.type;
+    } else if (props.space?.voting?.type) {
+      form.value.type = props.space.voting.type;
+    }
+  }
+);
+
+watch(
+  () => props.shouldUseOsnap,
+  () => {
+    if (props.shouldUseOsnap) {
+      form.value.type = 'basic';
     }
   }
 );
@@ -80,53 +93,42 @@ onMounted(async () => {
 });
 
 defineEmits<{
-  (event: 'osnapToggle'): void;
+  (event: 'legacyOsnapToggle'): void;
+  (event: 'toggleShouldUseOsnap'): void;
 }>();
 </script>
 
 <template>
-  <div v-if="osnap.enabled" class="mb-4">
-    <div v-if="space?.voting?.type && space.voting.type !== 'basic'">
-      <h6>Where is oSnap?</h6>
-      <p class="mb-3">
-        oSnap is currently disabled because your space's voting settings
-        disallow the basic voting type which is a requirement for oSnap to work
-        properly.
-      </p>
-      <p>
-        Have your admin visit your
-        <a :href="`#/${space.id}/settings`">settings page</a> under Voting ->
-        Type, and make sure either "Any" or "Basic Voting" is selected. This
-        will allow you to create oSnap proposals.
-      </p>
-    </div>
-    <div v-else>
-      <h6>oSnap Proposal</h6>
-      <p>
-        Are you planning for this proposal to initiate a transaction that your
-        organizations Safe will execute if approved? (Remember, oSnap enables
-        trustless and permissionless execution)
-      </p>
-      <br />
-      <input
-        id="toggleOsnap"
-        type="checkbox"
-        :checked="osnap.selection"
-        @change="$emit('osnapToggle')"
-      />
-      <label for="toggleOsnap">
-        Yes, use oSnap for transactions (this will restrict voting type to
-        Basic).
-      </label>
-    </div>
-  </div>
+  <SpaceCreateLegacyOsnap
+    v-if="legacyOsnap.enabled"
+    :space="space"
+    :legacy-osnap="legacyOsnap"
+    @legacy-osnap-toggle="$emit('legacyOsnapToggle')"
+  />
+  <SpaceCreateOsnap
+    v-if="hasOsnapPlugin"
+    :should-use-osnap="shouldUseOsnap"
+    :legacy-osnap="legacyOsnap"
+    @toggle-should-use-osnap="$emit('toggleShouldUseOsnap')"
+  />
   <div class="mb-5 space-y-4">
     <BaseBlock :title="$t('create.voting')">
       <InputSelectVoteType
         :type="space.voting?.type || form.type"
-        :disabled="!!space.voting?.type || osnap.selection"
+        :disabled="
+          !!space.voting?.type || legacyOsnap.selection || shouldUseOsnap
+        "
         @update:type="value => (form.type = value)"
       />
+      <template v-if="space.boost.enabled">
+        <BaseMessage
+          v-if="!BOOST_ENABLED_VOTING_TYPES.includes(form.type)"
+          level="info"
+          class="mt-2 border bg-[--border-color-subtle] p-3 rounded-xl"
+        >
+          Note that Boost is not available for this voting type.
+        </BaseMessage>
+      </template>
 
       <h4 class="mb-1 mt-3" v-text="$t('create.choices')" />
       <div class="flex">
@@ -164,7 +166,7 @@ defineEmits<{
                 </template>
                 <template #info>
                   <span
-                    class="hidden text-xs text-skin-text group-focus-within:block"
+                    class="hidden text-xs text-skin-text whitespace-nowrap group-focus-within:block"
                   >
                     {{ `${element.text.length}/32` }}
                   </span>
@@ -193,12 +195,14 @@ defineEmits<{
         <SpaceCreateVotingDateStart
           :delay="space.voting?.delay"
           :date="dateStart"
+          :is-editing="isEditing"
           @select="value => setDateStart(value)"
         />
 
         <SpaceCreateVotingDateEnd
           :period="space.voting?.period"
           :date="dateEnd"
+          :is-editing="isEditing"
           @select="value => setDateEnd(value)"
         />
       </div>

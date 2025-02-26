@@ -3,6 +3,7 @@ import { Remarkable } from 'remarkable';
 import { linkify } from 'remarkable/linkify';
 // import sanitizeHtml from 'sanitize-html';
 import { getIpfsUrl } from '@/helpers/utils';
+import { isSnapshotUrl } from '@/helpers/utils';
 
 const props = defineProps<{
   body: string;
@@ -28,13 +29,19 @@ const markdown = computed(() => {
   }
   body = body.replace(/!\[.*?\]\((ipfs:\/\/[a-zA-Z0-9]+?)\)/g, replaceIpfsUrl);
 
+  // if body contains a link that contain `_` , replace it with `\_` to escape it
+  body = body.replace(/(http.*?)(?=_)/g, '$1\\');
   return remarkable.render(body);
 });
 
 function handleLinkClick(e, url) {
   e.preventDefault();
   clickedUrl.value = url;
-  if (url.includes('snapshot.org/#/')) return handleConfirm();
+
+  if (isSnapshotUrl(url)) {
+    return handleConfirm();
+  }
+
   showModal.value = true;
 }
 

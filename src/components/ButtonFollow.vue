@@ -6,14 +6,25 @@ const props = defineProps<{
   primary?: boolean;
 }>();
 
+const { domain } = useApp();
 const { isGnosisSafe } = useClient();
+const { web3Account } = useWeb3();
 const { modalTermsOpen, termsAccepted, acceptTerms } = useTerms(props.space.id);
-const { clickFollow, loadingFollow, isFollowing } = useFollowSpace(
+const { clickFollow, loadingFollow, isFollowing, loadFollows } = useFollowSpace(
   props.space.id
 );
 
 const canFollow = computed(() =>
   props.space.terms ? termsAccepted.value || isFollowing.value : true
+);
+
+watch(
+  web3Account,
+  () => {
+    // Only for custom domain, else follows are loaded on sidebar
+    domain && loadFollows(props.space.id);
+  },
+  { immediate: true }
 );
 </script>
 
@@ -24,7 +35,7 @@ const canFollow = computed(() =>
     }"
     v-bind="$attrs"
   >
-    <BaseButton
+    <TuneButton
       v-bind="$attrs"
       :loading="loadingFollow === space.id"
       :disabled="isGnosisSafe"
@@ -38,8 +49,8 @@ const canFollow = computed(() =>
         loadingFollow !== ''
           ? null
           : canFollow
-          ? clickFollow(space.id)
-          : (modalTermsOpen = true)
+            ? clickFollow(space.id)
+            : (modalTermsOpen = true)
       "
     >
       <span v-if="!isFollowing"> {{ $t('join') }} </span>
@@ -51,7 +62,7 @@ const canFollow = computed(() =>
           {{ $t('leave') }}
         </span>
       </span>
-    </BaseButton>
+    </TuneButton>
   </div>
   <teleport to="#modal">
     <ModalTerms
